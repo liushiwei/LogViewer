@@ -10,8 +10,10 @@
 
     <uses-permission android:name="android.permission.READ_LOGS" />
     <uses-permission android:name="android.permission.SYSTEM_ALERT_WINDOW" />
+    <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
     <uses-permission android:name="android.permission.GET_TASKS" />
     <uses-permission android:name="android.permission.ACCESS_SUPERUSER" />
+    <uses-permission android:name="android.permission.WRITE_EXTERNAL_STORAGE" />
     <uses-permission android:name="com.readystatesoftware.ghostlog.permission.READ_LOGS" />
     <uses-sdk android:minSdkVersion="19" android:targetSdkVersion="19"/>
 
@@ -42,7 +44,13 @@
             android:name="com.readystatesoftware.ghostlog.ShareActivity"/>
         <service
             android:name="com.readystatesoftware.ghostlog.LogService" />
-
+        <service
+            android:name="com.readystatesoftware.ghostlog.LogSaveService" />
+		<receiver android:name="com.readystatesoftware.ghostlog.LogBroadcastReceiver">
+		     <intent-filter>
+                <action android:name="android.intent.action.BOOT_COMPLETED" />
+            </intent-filter>
+		</receiver>
     </application>
 
 </manifest>

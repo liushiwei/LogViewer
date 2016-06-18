@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<PreferenceScreen xmlns:android="http://schemas.android.com/apk/res/android">
+
+    <ListPreference
+        android:dialogTitle="@string/log_path"
+        android:key="@string/pref_log_path"
+        android:title="@string/log_path" />
+	<CheckBoxPreference android:title="@string/log_auto_save" android:key="@string/pref_log_auto_save" />
+	<SwitchPreference android:title="@string/log_start_save" android:key="@string/pref_log_start_save" />
+	<Preference android:title="@string/log_save_now" android:key="@string/pref_log_save_now"></Preference>
+</PreferenceScreen>

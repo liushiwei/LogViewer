@@ -79,6 +79,7 @@ public class LogService extends Service implements
     private ProcessMonitorAsyncTask mProcessMonitorTask;
     private DeviceInfoAsyncTask mDeviceInfoAsyncTask;
 
+    private int mDeviceId;
     public static boolean isRunning() {
         return sIsRunning;
     }
@@ -100,6 +101,7 @@ public class LogService extends Service implements
     @Override
     public int onStartCommand(Intent intent, int flags, int startId) {
         sIsRunning = true;
+        mDeviceId = intent.getIntExtra("device_id", 0);
         createSystemWindow();
         showNotification();
         startLogReader();
@@ -240,7 +242,7 @@ public class LogService extends Service implements
                 }
             }
         };
-        mLogReaderTask.executeOnExecutor(AsyncTask.THREAD_POOL_EXECUTOR);
+        mLogReaderTask.executeOnExecutor(AsyncTask.THREAD_POOL_EXECUTOR,mDeviceId);
         mDeviceInfoAsyncTask = new DeviceInfoAsyncTask(){
 
 			@Override

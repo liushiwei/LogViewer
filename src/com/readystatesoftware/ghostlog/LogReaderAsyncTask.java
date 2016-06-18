@@ -29,10 +29,10 @@ import java.io.InputStreamReader;
 import java.util.ArrayList;
 import java.util.Arrays;
 
-public class LogReaderAsyncTask extends AsyncTask<Void, LogLine, Boolean> {
+public class LogReaderAsyncTask extends AsyncTask<Integer, LogLine, Boolean> {
 
     @Override
-    protected Boolean doInBackground(Void... voids) {
+    protected Boolean doInBackground(Integer... voids) {
 
 //        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.JELLY_BEAN
 //                && !SuperUserHelper.requestRoot()) {
@@ -48,7 +48,7 @@ public class LogReaderAsyncTask extends AsyncTask<Void, LogLine, Boolean> {
             // clear buffer first
             clearLogcatBuffer();
 
-            process = LogcatHelper.getLogcatProcess(LogcatHelper.BUFFER_MAIN);
+            process = LogcatHelper.getLogcatProcess(LogcatHelper.mLogDevice[voids[0]]);
             reader = new BufferedReader(new InputStreamReader(process.getInputStream()), 8192);
 
             while (!isCancelled()) {

@@ -33,27 +33,49 @@ import android.content.SharedPreferences;
 import android.content.pm.PackageManager;
 import android.net.Uri;
 import android.os.Bundle;
+import android.os.Handler;
+import android.os.Message;
+import android.preference.ListPreference;
 import android.preference.Preference;
+import android.preference.Preference.OnPreferenceChangeListener;
+import android.preference.Preference.OnPreferenceClickListener;
 import android.preference.PreferenceCategory;
 import android.preference.PreferenceFragment;
 import android.preference.PreferenceManager;
+import android.preference.SwitchPreference;
 import android.support.v4.content.LocalBroadcastManager;
+import android.util.Log;
 import android.view.Gravity;
 import android.view.LayoutInflater;
 import android.view.View;
 import android.view.ViewGroup;
 import android.webkit.WebView;
+import android.widget.AdapterView;
+import android.widget.AdapterView.OnItemSelectedListener;
 import android.widget.CompoundButton;
+import android.widget.Spinner;
 import android.widget.Switch;
 import android.widget.TextView;
 import android.widget.Toast;
 
+import java.io.File;
+import java.io.FileFilter;
+import java.text.DateFormat;
+import java.text.SimpleDateFormat;
+import java.util.ArrayList;
+import java.util.Date;
 import java.util.List;
+import java.util.Locale;
+
+import com.nolanlawson.logcat.helper.LogcatHelper;
+
 
 public class MainActivity extends BasePreferenceActivity {
 
     private static final int CODE_TAG_FILTER = 1;
     private static Preference sTagFilterPref;
+    
+    private static int mDeviceId;
 
     private SharedPreferences mPrefs;
 
@@ -67,28 +89,48 @@ public class MainActivity extends BasePreferenceActivity {
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
-
-        Switch mainSwitch = new Switch(this);
+        LayoutInflater inflater = (LayoutInflater) getSystemService(Context.LAYOUT_INFLATER_SERVICE);
+		View actionBarView = inflater.inflate(R.layout.action_bar, null);
+        Switch mainSwitch = (Switch) actionBarView.findViewById(R.id.switch1);
         mainSwitch.setChecked(LogService.isRunning());
         mainSwitch.setOnCheckedChangeListener(new CompoundButton.OnCheckedChangeListener() {
             @Override
             public void onCheckedChanged(CompoundButton compoundButton, boolean b) {
                 Intent intent = new Intent(MainActivity.this, LogService.class);
+                intent.putExtra("device_id", mDeviceId);
                 if (b) {
                     if (!LogService.isRunning()) {
                         startService(intent);
+                        getActionBar().getCustomView().findViewById(R.id.spinner1).setEnabled(false);
                     }
                 } else {
                     stopService(intent);
+                    getActionBar().getCustomView().findViewById(R.id.spinner1).setEnabled(true);
                 }
             }
         });
+        Spinner spinner = (Spinner) actionBarView.findViewById(R.id.spinner1);
+        spinner.setOnItemSelectedListener(new OnItemSelectedListener() {
+
+			@Override
+			public void onItemSelected(AdapterView<?> parent, View view,
+					int position, long id) {
+				mDeviceId = position;
+			}
+
+			@Override
+			public void onNothingSelected(AdapterView<?> parent) {
+				// TODO Auto-generated method stub
+				
+			}
+        	
+		});
 
         final ActionBar bar = getActionBar();
         final ActionBar.LayoutParams lp = new ActionBar.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT);
         lp.gravity = Gravity.RIGHT | Gravity.CENTER_VERTICAL;
         lp.rightMargin = getResources().getDimensionPixelSize(R.dimen.main_switch_margin_right);
-        bar.setCustomView(mainSwitch, lp);
+        bar.setCustomView(actionBarView, lp);
         bar.setDisplayShowCustomEnabled(true);
 
         mPrefs = PreferenceManager.getDefaultSharedPreferences(this);
@@ -144,6 +186,20 @@ public class MainActivity extends BasePreferenceActivity {
         super.onDestroy();
         sTagFilterPref = null;
     }
+    String mLogPath;
+    private AlertDialog mDialog;
+    Handler mHandler = new Handler(){
+
+		@Override
+		public void handleMessage(Message msg) {
+			if(msg.what==0){
+				Toast.makeText(getApplication(), "Save Success!", Toast.LENGTH_SHORT).show();
+				mDialog.dismiss();
+			}
+			super.handleMessage(msg);
+		}
+    	
+    };
 
     /**
      * Shows the simplified settings UI if the device configuration if the
@@ -160,6 +216,85 @@ public class MainActivity extends BasePreferenceActivity {
 
         // Add 'filters' preferences.
         PreferenceCategory fakeHeader = new PreferenceCategory(this);
+        fakeHeader.setTitle(R.string.log_save);
+        getPreferenceScreen().addPreference(fakeHeader);
+        addPreferencesFromResource(R.xml.pref_save);
+        final ListPreference preference = (ListPreference) findPreference(getString(R.string.pref_log_path));
+        if(preference.getValue()!=null){
+        	
+        	mLogPath=preference.getValue();
+        	mHandler.post(new Runnable() {
+				
+				@Override
+				public void run() {
+					preference.setSummary(mLogPath);
+					
+				}
+			});
+        	
+        	
+        }
+        String[] path = getPaths();
+        preference.setEntries(path);
+        preference.setEntryValues(path);
+        
+        preference.setOnPreferenceChangeListener(new OnPreferenceChangeListener() {
+			
+			@Override
+			public boolean onPreferenceChange(Preference preference, Object newValue) {
+				mLogPath=newValue.toString();
+				preference.setSummary(mLogPath);
+				Log.e("TAG", "------"+newValue.toString());
+				
+				return true;
+			}
+		});
+        Preference saveNowPreference  = findPreference(getString(R.string.pref_log_save_now));
+        saveNowPreference.setOnPreferenceClickListener(new OnPreferenceClickListener() {
+			
+
+			@Override
+			public boolean onPreferenceClick(Preference preference) {
+				if(mLogPath!=null){
+					final DateFormat df5 = new SimpleDateFormat("yyyy-MM-dd-hh-mm", Locale.US); 
+				    
+					mDialog = new AlertDialog.Builder(MainActivity.this).setTitle(R.string.log_save_now).setMessage("Save log file to "+mLogPath+"/log_"+df5.format(new Date())+".txt").create();
+					mDialog.show();
+					new Thread(){
+
+						@Override
+						public void run() {
+							LogcatHelper.getSaveLogToFile("main", mLogPath+"/log_"+df5.format(new Date())+".txt");
+							mHandler.sendEmptyMessage(0);
+							super.run();
+						}
+						
+					}.start();
+				}else {
+					Toast.makeText(getBaseContext(), "Set Log File Path First!", Toast.LENGTH_SHORT).show();
+				}
+				return false;
+			}
+		});
+        
+        SwitchPreference startSavePreference  = (SwitchPreference) findPreference(getString(R.string.pref_log_start_save));
+        startSavePreference.setOnPreferenceChangeListener(new OnPreferenceChangeListener() {
+			
+			public boolean onPreferenceChange(Preference preference, Object newValue) {
+				if(!checkSavePath(mLogPath)){
+					Toast.makeText(MainActivity.this, "请设置正确的日志路径", Toast.LENGTH_SHORT).show();
+					return false;
+				}
+				SwitchPreference startSavePreference = (SwitchPreference) preference;
+				if(!startSavePreference.isChecked()){
+					startService(new Intent(MainActivity.this,LogSaveService.class));
+				}else{
+					stopService(new Intent(MainActivity.this,LogSaveService.class));
+				}
+				return true;
+			}
+		});
+        fakeHeader = new PreferenceCategory(this);
         fakeHeader.setTitle(R.string.filters);
         getPreferenceScreen().addPreference(fakeHeader);
         addPreferencesFromResource(R.xml.pref_filters);
@@ -182,8 +317,33 @@ public class MainActivity extends BasePreferenceActivity {
         setupVersionPref(this, findPreference(getString(R.string.pref_version)));
 
     }
+    
+    private boolean checkSavePath(String path){
+    	if(path==null)
+    		return false;
+    	File file = new File(path);
+    	return file.canWrite();
+    }
 
-    private void processRootFail() {
+    private String[] getPaths() {
+		File name = new File("/mnt/");
+		ArrayList<String> paths = new ArrayList<String>();
+		for(File path:name.listFiles(new FileFilter() {
+			
+			@Override
+			public boolean accept(File pathname) {
+				return pathname.canWrite();
+			}
+		})){
+			Log.e("TAG", path.getAbsolutePath());
+			paths.add(path.getAbsolutePath());
+		}
+		String[] returnString = new String[paths.size()];  ;
+		paths.toArray(returnString);
+		return returnString;
+	}
+
+	private void processRootFail() {
 
         int failCount = mPrefs.getInt(getString(R.string.pref_root_fail_count), 0);
         if (failCount == 0) {

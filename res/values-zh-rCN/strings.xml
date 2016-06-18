@@ -54,13 +54,13 @@
         <item>Error</item>
         <item>Assert</item>
     </string-array>
-    <string name="log_save">Save</string>
-    <string name="log_path">Select path</string>
+    <string name="log_save">保存日志</string>
+    <string name="log_path">选择路径</string>
 	<string name="pref_log_path">select_path</string>
-	<string name="log_auto_save">Auto Save</string>
-	<string name="log_start_save">Start Save</string>
+	<string name="log_auto_save">自动保存</string>
+	<string name="log_start_save">开始保存</string>
 	<string name="pref_log_auto_save">auto_save</string>
 	<string name="pref_log_start_save">start_save</string>
 	<string name="pref_log_save_now">save_now</string>
-	<string name="log_save_now">Save Now</string>
+	<string name="log_save_now">马上保存</string>
 </resources>

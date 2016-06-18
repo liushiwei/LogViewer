@@ -5,6 +5,8 @@ import android.os.Build;
 import com.nolanlawson.logcat.util.UtilLogger;
 
 import java.io.BufferedReader;
+import java.io.File;
+import java.io.FileOutputStream;
 import java.io.IOException;
 import java.io.InputStreamReader;
 import java.util.ArrayList;
@@ -16,6 +18,9 @@ public class LogcatHelper {
 	public static final String BUFFER_MAIN = "main";
 	public static final String BUFFER_EVENTS = "events";
 	public static final String BUFFER_RADIO = "radio";
+	public static final String BUFFER_SYSTEM = "system";
+	
+	public static String[] mLogDevice = {BUFFER_EVENTS,BUFFER_MAIN,BUFFER_RADIO,BUFFER_SYSTEM};
 
 	private static UtilLogger log = new UtilLogger(LogcatHelper.class);
 	
@@ -27,7 +32,7 @@ public class LogcatHelper {
 		return process;
 	}
 	
-	private static List<String> getLogcatArgs(String buffer) {
+	public static List<String> getLogcatArgs(String buffer) {
 		List<String> args = new ArrayList<String>(Arrays.asList("logcat", "-v", "threadtime"));
 		
 		// for some reason, adding -b main excludes log output from AndroidRuntime runtime exceptions,
@@ -77,5 +82,53 @@ public class LogcatHelper {
 		}
 		
 		return result;
+	}
+	
+	public static boolean getSaveLogToFile(String buffer,String fileName) {
+		Process dumpLogcatProcess = null;
+		BufferedReader reader = null;
+		String result = null;
+		try {
+			
+			List<String> args = getLogcatArgs(buffer);
+			args.add("-d"); // -d just dumps the whole thing
+			
+			dumpLogcatProcess = RuntimeHelper.exec(args);
+			reader = new BufferedReader(new InputStreamReader(dumpLogcatProcess
+					.getInputStream()), 8192);
+			File outPutFile = new File(fileName);
+			if(!outPutFile.exists()){
+				if(!outPutFile.createNewFile())
+					return false;
+			}
+			FileOutputStream outputStream = new FileOutputStream(outPutFile);
+			
+			String line;
+			while ((line = reader.readLine()) != null) {
+				outputStream.write(line.getBytes());
+				outputStream.write('\n');
+			}
+			outputStream.close();
+			return true;
+		} catch (IOException e) {
+			log.e(e, "unexpected exception");
+		} finally {		
+			if (dumpLogcatProcess != null) {
+				RuntimeHelper.destroy(dumpLogcatProcess);
+				log.d("destroyed 1 dump logcat process");
+			}
+			// post-jellybean, we just kill the process, so there's no need
+	        // to close the bufferedReader.  Anyway, it just hangs.
+	        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.JELLY_BEAN
+	                && reader != null) {
+				try {
+					reader.close();
+				} catch (IOException e) {
+					log.e(e, "unexpected exception");
+				}
+			}
+		}
+		return false;
+		
 	}
 }
