@@ -2,11 +2,15 @@ package com.readystatesoftware.ghostlog;
 
 import java.io.BufferedReader;
 import java.io.File;
+import java.io.FileInputStream;
 import java.io.FileOutputStream;
+import java.io.FilenameFilter;
 import java.io.IOException;
 import java.io.InputStreamReader;
 import java.text.DateFormat;
 import java.text.SimpleDateFormat;
+import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Date;
 import java.util.List;
 import java.util.Locale;
@@ -39,8 +43,9 @@ public class LogSaveService extends Service {
 	}
 
 	LogReaderAsyncTask mLogReaderAsyncTask;
-	String mSaveFile;
-
+	KmsgReaderAsyncTask mKmsgReaderAsyncTask;
+	String mLogCatSaveFile;
+	String mKmsgSaveFile;
 	@Override
 	public void onCreate() {
 
@@ -79,10 +84,27 @@ public class LogSaveService extends Service {
 				"/mnt/sdcard");
 		DateFormat df5 = new SimpleDateFormat("yyyy-MM-dd-hh-mm", Locale.US);
 
-		mSaveFile = pathString + "/log_" + df5.format(new Date()) + ".txt";
+		mLogCatSaveFile = pathString + "/log_" + df5.format(new Date()) + ".txt";
+		mKmsgSaveFile = pathString + "/kmsg_" + df5.format(new Date()) + ".txt";
 		mNotification.setLatestEventInfo(this, "Log Saving", "Save to "
-				+ mSaveFile, null);
-
+				+ mLogCatSaveFile, null);
+//		File logPathFile = new File(pathString);
+//		File[] files = logPathFile.listFiles(new FilenameFilter() {
+//			
+//			@Override
+//			public boolean accept(File dir, String filename) {
+//				if(filename.startsWith("log_")&&filename.endsWith(".txt"))
+//				return true;
+//				else {
+//					return false;
+//				}
+//			}
+//		});
+//		if(files!=null){
+//			for (File file : files) {
+//				file.delete();
+//			}
+//		}
 		// 设置setLatestEventInfo方法,如果不设置会App报错异常
 		NotificationManager mNotificationManager = (NotificationManager) getSystemService(Context.NOTIFICATION_SERVICE);
 
@@ -91,15 +113,24 @@ public class LogSaveService extends Service {
 		mNotificationManager.notify(2, mNotification);
 		Log.e("TAG", "START Service show Notification");
 		mLogReaderAsyncTask = new LogReaderAsyncTask();
-		mLogReaderAsyncTask.executeOnExecutor(AsyncTask.THREAD_POOL_EXECUTOR);
-
+		List<String> logcat_args = LogcatHelper.getLogcatArgs("main");
+		mLogReaderAsyncTask.executeOnExecutor(AsyncTask.THREAD_POOL_EXECUTOR,new ExecObj(logcat_args,mLogCatSaveFile));
+		if(new File("/proc/kmsg").canRead()){
+			List<String> args = new ArrayList<String>(Arrays.asList("sudo","3bf8e6ea","cat" ,"/proc/kmsg"));
+			mKmsgReaderAsyncTask = new KmsgReaderAsyncTask();
+			mKmsgReaderAsyncTask.executeOnExecutor(AsyncTask.THREAD_POOL_EXECUTOR,new ExecObj(args,mKmsgSaveFile));
+		}
 	}
 
 	private void stopLogReader() {
 		if (mLogReaderAsyncTask != null) {
 			mLogReaderAsyncTask.cancel(true);
 		}
+		if (mKmsgReaderAsyncTask != null) {
+			mKmsgReaderAsyncTask.cancel(true);
+		}
 		mLogReaderAsyncTask = null;
+		mKmsgReaderAsyncTask = null;
 		Log.i("LogSaveService", "Log reader task stopped");
 	}
 
@@ -111,68 +142,32 @@ public class LogSaveService extends Service {
 		stopLogReader();
 		super.onDestroy();
 	}
-
-	public static boolean getSaveLogToFile(String buffer, String fileName) {
-		Process dumpLogcatProcess = null;
-		BufferedReader reader = null;
-		String result = null;
-		try {
-
-			List<String> args = LogcatHelper.getLogcatArgs(buffer);
-			args.add("-d"); // -d just dumps the whole thing
-
-			dumpLogcatProcess = RuntimeHelper.exec(args);
-			reader = new BufferedReader(new InputStreamReader(
-					dumpLogcatProcess.getInputStream()), 8192);
-			File outPutFile = new File(fileName);
-			if (!outPutFile.exists()) {
-				if (!outPutFile.createNewFile())
-					return false;
-			}
-			FileOutputStream outputStream = new FileOutputStream(outPutFile);
-
-			String line;
-			while ((line = reader.readLine()) != null) {
-				outputStream.write(line.getBytes());
-				outputStream.write('\n');
-			}
-			outputStream.close();
-			return true;
-		} catch (IOException e) {
-			e.printStackTrace();
-		} finally {
-			if (dumpLogcatProcess != null) {
-				RuntimeHelper.destroy(dumpLogcatProcess);
-				Log.d("LogSaveService", "destroyed 1 dump logcat process");
-			}
-			// post-jellybean, we just kill the process, so there's no need
-			// to close the bufferedReader. Anyway, it just hangs.
-			if (Build.VERSION.SDK_INT < Build.VERSION_CODES.JELLY_BEAN
-					&& reader != null) {
-				try {
-					reader.close();
-				} catch (IOException e) {
-					e.printStackTrace();
-				}
-			}
+	
+	class ExecObj {
+		List<String> argsList;
+		String outPutPathString ;
+		public ExecObj(List<String> argsList,String outPutPathString){
+			this.argsList = argsList;
+			this.outPutPathString = outPutPathString;
 		}
-		return false;
-
+		
 	}
 
-	class LogReaderAsyncTask extends AsyncTask<Integer, LogLine, Boolean> {
+
+	class LogReaderAsyncTask extends AsyncTask<ExecObj,Void,Boolean> {
 		Process process = null;
 		BufferedReader reader = null;
 		boolean ok = true;
 
 		@Override
-		protected Boolean doInBackground(Integer... params) {
+		protected Boolean doInBackground(ExecObj... params) {
 			try {
 
-				process = LogcatHelper.getLogcatProcess("main");
+				//process = LogcatHelper.getLogcatProcess("main");
+				process = RuntimeHelper.exec(params[0].argsList);
 				reader = new BufferedReader(new InputStreamReader(
 						process.getInputStream()), 8192);
-				File outPutFile = new File(mSaveFile);
+				File outPutFile = new File(params[0].outPutPathString);
 				if (!outPutFile.exists()) {
 					if (!outPutFile.createNewFile())
 						return false;
@@ -180,9 +175,83 @@ public class LogSaveService extends Service {
 				FileOutputStream outputStream = new FileOutputStream(outPutFile);
 
 				String line;
+				int sync=0;
 				while (!isCancelled() && (line = reader.readLine()) != null) {
 					outputStream.write(line.getBytes());
 					outputStream.write('\n');
+						outputStream.flush();
+						sync++;
+						if (sync==50) {
+							RuntimeHelper.exec(new ArrayList<String>(Arrays.asList("sync")));
+							sync=0;
+						}
+						
+				}
+				outputStream.close();
+
+			} catch (IOException e) {
+				
+				e.printStackTrace();
+				ok = false;
+
+			} catch (Exception e) {
+				e.printStackTrace();
+				ok = false;
+
+			} finally {
+
+				if (process != null) {
+					RuntimeHelper.destroy(process);
+				}
+
+				if (Build.VERSION.SDK_INT < Build.VERSION_CODES.JELLY_BEAN
+						&& reader != null) {
+					try {
+						reader.close();
+					} catch (IOException e) {
+						e.printStackTrace();
+					}
+				}
+
+			}
+			return null;
+		}
+
+	}
+	
+	class KmsgReaderAsyncTask extends AsyncTask<ExecObj,Void,Boolean> {
+		Process process = null;
+		BufferedReader reader = null;
+		boolean ok = true;
+
+		@Override
+		protected Boolean doInBackground(ExecObj... params) {
+			try {
+
+				//process = LogcatHelper.getLogcatProcess("main");
+				process = RuntimeHelper.exec(params[0].argsList);
+				reader = new BufferedReader(new InputStreamReader(
+						process.getInputStream()), 8192);
+				File outPutFile = new File(params[0].outPutPathString);
+				if (!outPutFile.exists()) {
+					if (!outPutFile.createNewFile())
+						return false;
+				}
+				FileOutputStream outputStream = new FileOutputStream(outPutFile);
+
+				String line;
+				int sync=0;
+				while (!isCancelled() && (line = reader.readLine()) != null) {
+					outputStream.write(line.getBytes());
+					Log.e("LogSaveService", "kmsg:"+line);
+					outputStream.write('\n');
+						outputStream.flush();
+						sync++;
+						if (sync==50) {
+							RuntimeHelper.exec(new ArrayList<String>(Arrays.asList("sync")));
+							sync=0;
+						}
+						
 				}
 				outputStream.close();
 
